@@ -84,7 +84,11 @@ namespace Twad.DotNet.Utility.Excel
                 PropertyInfo[] propertys = list[0].GetType().GetProperties();
                 foreach (PropertyInfo pi in propertys)
                 {
-                    result.Columns.Add(pi.Name, pi.PropertyType);
+                    Type colType = pi.PropertyType; if ((colType.IsGenericType) && (colType.GetGenericTypeDefinition() == typeof(Nullable<>)))
+                    {
+                        colType = colType.GetGenericArguments()[0];
+                    }
+                    result.Columns.Add(pi.Name, colType);
                 }
 
                 for (int i = 0; i < list.Count; i++)
