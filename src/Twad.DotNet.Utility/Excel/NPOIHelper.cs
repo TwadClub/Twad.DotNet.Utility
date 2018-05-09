@@ -490,15 +490,11 @@ namespace Twad.DotNet.Utility.Excel
                 throw (new Exception("请对ListColumnsName设置要导出的列名！"));
             }
             MemoryStream excelStream = ExportExcel(excelWorkbook, list, execlCellStyleList, validationAreaList);
-            response.Clear();
-            response.AddHeader("content-disposition", string.Format("attachment;filename={0}({1}).xls", fileName, DateTime.Now.ToString("yyyyMMdd")));
-            response.Charset = "utf-8";
-            response.ContentEncoding = System.Text.Encoding.GetEncoding("gb2312");
+     
+
             response.ContentType = "application/vnd.xls";
-            response.BinaryWrite((excelStream).ToArray());
-            excelStream.Close();
-            excelStream.Dispose();
-            response.End();
+            response.Body= excelStream;
+     
         }
         /// <summary>
         /// 
@@ -565,9 +561,9 @@ namespace Twad.DotNet.Utility.Excel
         foreach (var de in ListColumnsName)
         {
             ICell newCell = newRow.CreateCell(cellIndex);
-            newCell.SetCellValue(de.Value.ToString());
+            newCell.SetCellValue(de.ToString());
             //按表头文字的宽度
-            excelSheet.SetColumnWidth(cellIndex, de.Value.ToString().Length * 650);
+            excelSheet.SetColumnWidth(cellIndex, de.ToString().Length * 650);
             ExeclCellStyle execlCellStyle = execlCellStyleList.FirstOrDefault(it => it.ColumnsName == de.Key);
             if (execlCellStyle != null)
             {
