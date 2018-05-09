@@ -1,12 +1,14 @@
 ﻿using Microsoft.AspNetCore.Http;
 using NPOI.HSSF.UserModel;
 using NPOI.SS.UserModel;
+using NPOI.SS.Util;
 using NPOI.XSSF.UserModel;
 using System;
 using System.Collections;
 using System.Collections.Generic;
 using System.Data;
 using System.IO;
+using System.Linq;
 using System.Text;
 using System.Web;
 
@@ -472,6 +474,302 @@ namespace Twad.DotNet.Utility.Excel
                 }
             }
         }
+        /// <summary>
+        /// 导出Excel
+        /// </summary>
+        /// <param name="response">返回流</param>
+        /// <param name="excelWorkbook">excelWorkbook</param>
+        /// <param name="list">数据集合</param>
+        /// <param name="execlCellStyleList">单元格样式集合</param>
+        /// <param name="validationAreaList">格式验证区域</param>
+        /// <param name="fileName">文件名称</param>
+        public static void ExportExcel(HttpResponse response, IWorkbook excelWorkbook, IList list, List<ExeclCellStyle> execlCellStyleList, List<ValidationArea> validationAreaList, string fileName)
+        {
+            if (ListColumnsName == null || ListColumnsName.Count == 0)
+            {
+                throw (new Exception("请对ListColumnsName设置要导出的列名！"));
+            }
+            MemoryStream excelStream = ExportExcel(excelWorkbook, list, execlCellStyleList, validationAreaList);
+            response.Clear();
+            response.AddHeader("content-disposition", string.Format("attachment;filename={0}({1}).xls", fileName, DateTime.Now.ToString("yyyyMMdd")));
+            response.Charset = "utf-8";
+            response.ContentEncoding = System.Text.Encoding.GetEncoding("gb2312");
+            response.ContentType = "application/vnd.xls";
+            response.BinaryWrite((excelStream).ToArray());
+            excelStream.Close();
+            excelStream.Dispose();
+            response.End();
+        }
+        /// <summary>
+        /// 
+        /// </summary>
+        /// <param name="excelWorkbook">excelWorkbook</param>
+        /// <param name="list">数据集合</param>
+        /// <param name="execlCellStyleList">单元格样式集合</param>
+        /// <param name="validationAreaList">格式验证区域</param>
+        /// <returns></returns>
+        public static MemoryStream ExportExcel(IWorkbook excelWorkbook, IList list, List<ExeclCellStyle> execlCellStyleList, List<ValidationArea> validationAreaList)
+        {
+            MemoryStream excelStream = new MemoryStream();
+            DataTable dtSource = DataHelper.ToDataTable(list);
+            InsertRow(dtSource, excelWorkbook, execlCellStyleList, validationAreaList);
+            SaveExcelFile(excelWorkbook, excelStream);
+            return excelStream;
+        }
+        /// <summary>
+        /// 插入数据行
+        /// </summary>
+        /// <param name="dtSource">数据表</param>
+        /// <param name="excelWorkbook">工作簿</param>
+        /// <param name="execlCellStyleList">execl单元格样式</param>
+        /// <param name="validationAreaList">格式验证区域</param>
+        private static void InsertRow(DataTable dtSource, IWorkbook excelWorkbook, List<ExeclCellStyle> execlCellStyleList, List<ValidationArea> validationAreaList)
+        {
+            int rowCount = 1;
+            int sheetCount = 1;
+            ISheet newsheet = null;
+
+            //循环数据源导出数据集
+            newsheet = excelWorkbook.CreateSheet("Sheet" + sheetCount);
+
+            ICellStyle style = BorderCellStyle(excelWorkbook);
+            //合并单元格
+            SetCellRangeAddress(newsheet, 0, 0, 1, 6);
+            IRow woringRow = newsheet.CreateRow(0);
+            woringRow.Height = 30 * 20;
+            ICell newCell = woringRow.CreateCell(1);
+            newCell.CellStyle = style;
+            newCell.CellStyle.Alignment = HorizontalAlignment.Left;
+            newCell.SetCellValue(GetWaring());
+            newCell.CellStyle.WrapText = true;
+
+            //设置表头
+            CreateHeader(newsheet, style, execlCellStyleList);
+
+            foreach (DataRow dr in dtSource.Rows)
+            {
+                rowCount++;
+                IRow newRow = newsheet.CreateRow(rowCount);
+
+                InsertCell(dtSource, dr, newRow, newsheet, excelWorkbook, execlCellStyleList, rowCount);
+            }
+            //当前工作薄添加数字限制区域
+            SheetAddValidationArea(newsheet, validationAreaList);
+        }
+    
+    private static void CreateHeader(ISheet excelSheet, ICellStyle style, List<ExeclCellStyle> execlCellStyleList)
+    {
+        int cellIndex = 0;
+        IRow newRow = excelSheet.CreateRow(1);
+        //循环导出列
+        foreach (var de in ListColumnsName)
+        {
+            ICell newCell = newRow.CreateCell(cellIndex);
+            newCell.SetCellValue(de.Value.ToString());
+            //按表头文字的宽度
+            excelSheet.SetColumnWidth(cellIndex, de.Value.ToString().Length * 650);
+            ExeclCellStyle execlCellStyle = execlCellStyleList.FirstOrDefault(it => it.ColumnsName == de.Key);
+            if (execlCellStyle != null)
+            {
+                newCell.CellStyle = execlCellStyle.TitleStyle;//用户自定义表头样式
+            }
+            else
+            {
+                newCell.CellStyle = style;//赋默认值
+            }
+            cellIndex++;
+        }
+    }
+
+
+
+
+    /// <summary>
+    /// 导出数据行
+    /// </summary>
+    /// <param name="dtSource">数据表</param>
+    /// <param name="drSource">来源数据行</param>
+    /// <param name="currentExcelRow">当前数据行</param>
+    /// <param name="excelSheet">sheet集合</param>
+    /// <param name="excelWorkBook">数据表</param>
+    /// <param name="execlCellStyleList">表头样式</param>
+    /// <param name="rowCount">execl当前行</param>
+    private static void InsertCell(DataTable dtSource, DataRow drSource, IRow currentExcelRow, ISheet excelSheet, IWorkbook excelWorkBook, List<ExeclCellStyle> execlCellStyleList, int rowCount)
+        {
+            int cellIndex = 0;
+            foreach (var item in ListColumnsName)
+            {
+                //列名称
+                string columnsName = item.Key.ToString();
+                //根据列名称设置列样式
+                ExeclCellStyle execlCellStyle = execlCellStyleList?.FirstOrDefault(it => it.ColumnsName == columnsName) ?? null;
+                ICellStyle columnStyle = excelSheet.GetColumnStyle(cellIndex);
+                //设置列样式
+                //excelSheet.SetDefaultColumnStyle(cellIndex, SetExeclColumnStyle(columnStyle, excelWorkBook, execlCellStyle));
+                //设置列宽
+                if ((execlCellStyle?.Width ?? 0) > 0)
+                {
+                    excelSheet.SetColumnWidth(cellIndex, execlCellStyle.Width);
+                }
+                if (execlCellStyle?.IsHidden ?? false)
+                {
+                    excelSheet.SetColumnHidden(cellIndex, true);
+                }
+                ICell newCell = null;
+                System.Type rowType = drSource[columnsName].GetType();
+                string drValue = drSource[columnsName].ToString().Trim();
+                //错误消息列
+                string errColumn = columnsName + "ErrMsg";
+                string errMsg = string.Empty;
+                if (dtSource.Columns.Contains(errColumn))
+                {
+                    errMsg = drSource[errColumn].ToString().Trim();
+                }
+                switch (rowType.ToString())
+                {
+                    case "System.String"://字符串类型
+                        drValue = drValue.Replace("&", "&");
+                        drValue = drValue.Replace(">", ">");
+                        drValue = drValue.Replace("<", "<");
+                        newCell = currentExcelRow.CreateCell(cellIndex);
+                        newCell.SetCellValue(drValue);
+                        break;
+                    case "System.Guid"://GUID类型                        
+                        newCell = currentExcelRow.CreateCell(cellIndex);
+                        newCell.SetCellValue(drValue);
+                        break;
+                    case "System.DateTime"://日期类型
+                        DateTime dateV;
+                        DateTime.TryParse(drValue, out dateV);
+                        newCell = currentExcelRow.CreateCell(cellIndex);
+                        newCell.SetCellValue(dateV);
+                        //格式化显示
+                        ICellStyle cellStyle = excelWorkBook.CreateCellStyle();
+                        IDataFormat format = excelWorkBook.CreateDataFormat();
+                        cellStyle.DataFormat = format.GetFormat("yyyy-mm-dd hh:mm:ss");
+                        newCell.CellStyle = cellStyle;
+                        break;
+                    case "System.Boolean"://布尔型
+                        bool boolV = false;
+                        bool.TryParse(drValue, out boolV);
+                        newCell = currentExcelRow.CreateCell(cellIndex);
+                        newCell.SetCellValue(boolV);
+                        break;
+                    case "System.Int16"://整型
+                    case "System.Int32":
+                    case "System.Int64":
+                    case "System.Byte":
+                        int intV = 0;
+                        int.TryParse(drValue, out intV);
+                        newCell = currentExcelRow.CreateCell(cellIndex);
+                        newCell.SetCellValue(intV.ToString());
+                        break;
+                    case "System.Decimal"://浮点型
+                    case "System.Double":
+                        double doubV = 0;
+                        double.TryParse(drValue, out doubV);
+                        newCell = currentExcelRow.CreateCell(cellIndex);
+                        newCell.SetCellValue(doubV);
+                        break;
+                    case "System.DBNull"://空值处理
+                        newCell = currentExcelRow.CreateCell(cellIndex);
+                        newCell.SetCellValue("");
+                        break;
+                    default:
+                        throw (new Exception(rowType.ToString() + "：类型数据无法处理!"));
+                }
+                //设置单元格样式
+                SetExeclCellStyle(newCell, execlCellStyle);
+                //设置批注
+                if (!string.IsNullOrWhiteSpace(errMsg))
+                {
+                    SetComment(errMsg, currentExcelRow, newCell, excelWorkBook.GetCreationHelper(), (HSSFPatriarch)excelSheet.CreateDrawingPatriarch());
+                }
+                //设置计算表达式
+                if (!string.IsNullOrEmpty(execlCellStyle.SetCellFormula))
+                {
+                    int rowIndex = rowCount + 1;
+                    newCell.SetCellFormula(string.Format(execlCellStyle.SetCellFormula, rowIndex));
+                    if (excelSheet.ForceFormulaRecalculation == false)
+                    {
+                        excelSheet.ForceFormulaRecalculation = true;//没有此句，则不会刷新出计算结果
+                    }
+                }
+                cellIndex++;
+            }
+            bool shouldLock = execlCellStyleList?.FirstOrDefault(it => it.IsLock == true)?.IsLock ?? false;
+            if (shouldLock == true)
+            {
+                excelSheet.ProtectSheet("password");//设置密码保护
+            }
+
+        }
+        /// <summary>
+        /// 列锁定
+        /// </summary>
+        /// <param name="columnStyle"></param>
+        /// <param name="excelWorkBook"></param>
+        /// <param name="execlCellStyle"></param>
+        private static ICellStyle SetExeclColumnStyle(ICellStyle columnStyle, IWorkbook excelWorkBook, ExeclCellStyle execlCellStyle)
+        {
+            if (columnStyle == null)
+            {
+                columnStyle = excelWorkBook.CreateCellStyle();
+            }
+            if (execlCellStyle != null)
+            {
+                columnStyle.IsLocked = execlCellStyle.IsLock;
+                columnStyle.IsHidden = execlCellStyle.IsHidden;
+            }
+            return columnStyle;
+        }
+        /// <summary>
+        /// 单元格格式
+        /// </summary>
+        /// <param name="execlCell"></param>
+        /// <param name="execlCellStyle"></param>
+        /// <returns></returns>
+        private static void SetExeclCellStyle(ICell execlCell, ExeclCellStyle execlCellStyle)
+        {
+            execlCell.CellStyle = execlCellStyle.CellStyle;
+        }
+        /// <summary>
+        /// 设置批注
+        /// </summary>
+        /// <param name="errMsg"></param>
+        /// <param name="row"></param>
+        /// <param name="cell"></param>
+        /// <param name="facktory"></param>
+        /// <param name="patr"></param>
+        public static void SetComment(string errMsg, IRow row, ICell cell, ICreationHelper facktory, HSSFPatriarch patr)
+        {
+
+
+            var anchor = facktory.CreateClientAnchor();
+            anchor.Col1 = cell.ColumnIndex;
+            anchor.Col2 = cell.ColumnIndex + 3;
+            anchor.Row1 = row.RowNum;
+            anchor.Row2 = row.RowNum + 5;
+            var comment = patr.CreateCellComment(anchor);
+            comment.String = new HSSFRichTextString(errMsg);
+            comment.Author = ("mysoft");
+            cell.CellComment = (comment);
+
+        }
+        /// <summary>
+        /// 合并单元格
+        /// </summary>
+        /// <param name="sheet">要合并单元格所在的sheet</param>
+        /// <param name="rowstart">开始行的索引</param>
+        /// <param name="rowend">结束行的索引</param>
+        /// <param name="colstart">开始列的索引</param>
+        /// <param name="colend">结束列的索引</param>
+        public static void SetCellRangeAddress(ISheet sheet, int rowstart, int rowend, int colstart, int colend)
+        {
+            CellRangeAddress cellRangeAddress = new CellRangeAddress(rowstart, rowend, colstart, colend);
+            sheet.AddMergedRegion(cellRangeAddress);
+        }
+
         #endregion
     }
     //排序实现接口 不进行排序 根据添加顺序导出
