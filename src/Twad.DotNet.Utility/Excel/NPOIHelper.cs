@@ -12,7 +12,7 @@ using System.Web;
 
 namespace Twad.DotNet.Utility.Excel
 {
-    public class NPOIHelper
+    public partial class NPOIHelper
     {
         /// <summary>
         /// 需要初始化设置的表头的列名（必须设置）
