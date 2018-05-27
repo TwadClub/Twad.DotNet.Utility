@@ -564,7 +564,7 @@ namespace Twad.DotNet.Utility.Excel
             newCell.SetCellValue(de.ToString());
             //按表头文字的宽度
             excelSheet.SetColumnWidth(cellIndex, de.ToString().Length * 650);
-            ExeclCellStyle execlCellStyle = execlCellStyleList.FirstOrDefault(it => it.ColumnsName == de.Key);
+            ExeclCellStyle execlCellStyle = execlCellStyleList.FirstOrDefault(it => it.ColumnsName == de.ToString());
             if (execlCellStyle != null)
             {
                 newCell.CellStyle = execlCellStyle.TitleStyle;//用户自定义表头样式
@@ -596,7 +596,7 @@ namespace Twad.DotNet.Utility.Excel
             foreach (var item in ListColumnsName)
             {
                 //列名称
-                string columnsName = item.Key.ToString();
+                string columnsName = item.ToString();
                 //根据列名称设置列样式
                 ExeclCellStyle execlCellStyle = execlCellStyleList?.FirstOrDefault(it => it.ColumnsName == columnsName) ?? null;
                 ICellStyle columnStyle = excelSheet.GetColumnStyle(cellIndex);
